@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  influxdb:
+    image: influxdb:2.6.1
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: holaplex
+      DOCKER_INFLUXDB_INIT_PASSWORD: holaplex
+      DOCKER_INFLUXDB_INIT_ORG: holaplex
+      DOCKER_INFLUXDB_INIT_BUCKET: hub-analytics
+      # TODO: what is this and where did it come from
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: F-QFQpmCL9UkR3qyoXnLkzWj03s6m4eCvYgDl1ePfHBf9ph7yxaSgQ6WN0i9giNgRTfONwVMK1f977r_g71oNQ==
+    ports:
+      - '8086:8086'

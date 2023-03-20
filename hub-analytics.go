@@ -4,16 +4,75 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"fmt"
 	"log"
+	"net"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 
-	"google.golang.org/protobuf/types/known/timestamppb"
 	"github.com/holaplex/hub-analytics/proto/analytics"
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
 	influxApi "github.com/influxdata/influxdb-client-go/v2/api"
 	influxDomain "github.com/influxdata/influxdb-client-go/v2/domain"
 	"github.com/joho/godotenv"
+	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/pkg/sasl/scram"
 )
+
+type ServiceConfig struct {
+	MessageGroup    string
+	RequestedTopics []string
+	Name            string
+}
+
+func connectKafka(log *log.Logger, config *ServiceConfig) (client *kgo.Client, err error) {
+	seedList := os.Getenv("KAFKA_BROKERS")
+	brokerSeeds := strings.Split(seedList, ",")
+
+	opts := []kgo.Opt{
+		kgo.SeedBrokers(brokerSeeds...),
+		kgo.WithLogger(kgo.BasicLogger(os.Stderr, kgo.LogLevelInfo, nil)),
+		kgo.ConsumerGroup(fmt.Sprintf("%s@%s", config.MessageGroup, config.Name)),
+		kgo.ConsumeTopics(config.RequestedTopics...),
+	}
+
+	user := os.Getenv("KAFKA_USERNAME")
+	pass := os.Getenv("KAFKA_PASSWORD")
+	sslStr := os.Getenv("KAFKA_SSL")
+
+	ssl := false
+	if len(sslStr) > 0 {
+		ssl, err = strconv.ParseBool(sslStr)
+		if err != nil {
+			return
+		}
+	}
+
+	if len(user) > 0 || len(pass) > 0 {
+		opts = append(opts, kgo.SASL(scram.Sha512(func(ctx context.Context) (scram.Auth, error) {
+			return scram.Auth{
+				User: user,
+				Pass: pass,
+			}, nil
+		})))
+	}
+
+	if ssl {
+		dialer := &tls.Dialer{NetDialer: &net.Dialer{Timeout: 60 * time.Second}}
+
+		opts = append(opts, kgo.Dialer(dialer.DialContext))
+	}
+
+	client, err = kgo.NewClient(opts...)
+	if err != nil {
+		return
+	}
+
+	return
+}
 
 func connectInflux(log *log.Logger) (client influxdb2.Client, write influxApi.WriteAPI, err error) {
 	url := os.Getenv("DB_URL")
@@ -80,10 +139,21 @@ func insert(
 	write.WritePoint(influxdb2.NewPoint(msg.Series, msg.Tags, values, msg.Ts.AsTime()))
 }
 
-func drainErrors(ch <-chan error) {
+func recvMessages(log *log.Logger, client *kgo.Client, ch chan<- *analytics.Datapoint) {
 	for {
-		err := <-ch
+		fetches := client.PollFetches(context.Background())
+		if fetches.IsClientClosed() {
+			break
+		}
 
+		fetches.EachError(func(topic string, part int32, err error) {
+			log.Printf("Kafka fetch error in topic %s, partition %d: %v", topic, part, err)
+		})
+	}
+}
+
+func drainErrors(log *log.Logger, ch <-chan error) {
+	for err := range ch {
 		log.Println("Error writing point: ", err)
 	}
 }
@@ -96,23 +166,31 @@ func main() {
 		log.Println("Error loading .env: ", err)
 	}
 
-	client, write, err := connectInflux(log)
+	config := &ServiceConfig{
+		MessageGroup:    "AnalyticsGroup",
+		RequestedTopics: []string{},
+		Name:            "hub-analytics",
+	}
+
+	kafkaClient, err := connectKafka(log, config)
+	if err != nil {
+		log.Fatalln("Error connecting to Kafka: ", err)
+	}
+	defer kafkaClient.Close()
+
+	msgs := make(chan *analytics.Datapoint)
+	go recvMessages(log, kafkaClient, msgs)
+
+	influxClient, write, err := connectInflux(log)
 	if err != nil {
 		log.Fatalln("Error connecting to InfluxDB: ", err)
 	}
+	defer influxClient.Close()
 
-	go drainErrors(write.Errors())
+	go drainErrors(log, write.Errors())
 
-	insert(
-		write,
-		&analytics.Datapoint{
-			Ts:     timestamppb.Now(),
-			Series: "nft",
-			Tags:   map[string]string{"nft": "foo"},
-			Values: map[string]*analytics.Datapoint_Value{"fuc": nil},
-		},
-	)
-	write.Flush()
-
-	log.Println("Client: ", client)
+	for msg := range msgs {
+		insert(write, msg)
+		write.Flush() // TODO
+	}
 }

@@ -12,6 +12,11 @@ require (
 require (
 	github.com/deepmap/oapi-codegen v1.8.2 // indirect
 	github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839 // indirect
+	github.com/klauspost/compress v1.16.3 // indirect
+	github.com/pierrec/lz4/v4 v4.1.17 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	golang.org/x/net v0.0.0-20210119194325-5f4716e94777 // indirect
+	github.com/twmb/franz-go v1.13.0 // indirect
+	github.com/twmb/franz-go/pkg/kmsg v1.4.0 // indirect
+	golang.org/x/crypto v0.7.0 // indirect
+	golang.org/x/net v0.8.0 // indirect
 )

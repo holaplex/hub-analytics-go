@@ -16,13 +16,10 @@ RUN cp target/debug/hub-core-proto .
 
 FROM golang:1.19-bullseye AS build-base
 
-WORKDIR /app 
+WORKDIR /app
 
 # Copy only files required to install dependencies (better layer caching)
 COPY go.mod go.sum ./
-
-# Get hub-core-proto binary
-COPY --from=build-hub-core-proto /app/hub-core/hub-core-proto hub-core-proto
 
 # Use cache mount to speed up install of existing dependencies
 RUN --mount=type=cache,target=/go/pkg/mod \
@@ -38,8 +35,10 @@ RUN apt-get update \
       protobuf-compiler \
       golang-goprotobuf-dev
 
+# Get hub-core-proto binary
+COPY --from=build-hub-core-proto /app/hub-core/hub-core-proto /usr/local/bin/hub-core-proto
 
-protoc proto/analytics.proto --go_out=proto --go_opt=Mproto/analytics.proto=/analytics
+#RUN protoc proto/analytics.proto --go_out=proto --go_opt=Mproto/analytics.proto=/analytics
 
 # Add non root user
 RUN useradd -u 1001 nonroot
@@ -48,7 +47,7 @@ COPY . .
 
 # Compile application during build rather than at runtime
 # Add flags to statically link binary
-run go build \
+RUN go build \
   -ldflags="-linkmode external -extldflags -static" \
   -tags netgo \
   -o hub-analytics

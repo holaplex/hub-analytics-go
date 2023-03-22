@@ -1,5 +1,5 @@
 [registry]
-endpoint = "http://localhost:8081/"
+endpoint = "https://schemas.holaplex.tools/"
 
 [schemas]
-foo = { version = 1, go-mod = "/foo" }
+analytics = { version = 1, go-mod = "/analytics" }

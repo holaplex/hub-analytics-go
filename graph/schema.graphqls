@@ -1,0 +1,100 @@
+# GraphQL schema example
+#
+# https://gqlgen.com/getting-started/
+
+# Magic name for adding time.Time marshalling
+scalar Time
+
+"""
+Root type for all queries
+"""
+type Query {
+  """
+  The project associated with the given ID
+  """
+  project(id: ID!): Project!
+}
+
+# type Mutation {}
+
+"""
+The analytics data corresponding to a single project
+"""
+type Project {
+  """
+  The drop associated with the given ID
+  """
+  drop(id: ID!): Drop!
+}
+
+"""
+The analytics data corresponding to a single drop
+"""
+type Drop {
+  """
+  Drop statistics for the given time window
+  """
+  stats(startTime: Time!, endTime: Time): DropStats!
+}
+
+"""
+Statistics for a single drop
+"""
+type DropStats {
+  """
+  The number of mints having occurred within the sampling range
+  """
+  mints: IntStatistic!
+
+  """
+  Windowed time-series data within the sampling range
+  """
+  timeSeries(window: Window!): DropTimeSeriesStats!
+}
+
+enum Window {
+  HOURLY
+  DAILY
+  MONTHLY
+}
+
+"""
+Time-series statistics for a single drop
+"""
+type DropTimeSeriesStats {
+  """
+  Number of mints per window
+  """
+  mints: [IntDatapoint!]!
+}
+
+"""
+A single (non-time-series) integer statistic
+"""
+type IntStatistic {
+  """
+  The value of this datapoint within the sampling range
+  """
+  current: Int!
+
+  """
+  The value of this datapoint within a sampling range of equal size ending at
+  the current range's start
+  """
+  previous: Int!
+}
+
+"""
+An integer datapoint for time-series statistics
+"""
+type IntDatapoint {
+  """
+  The date and time of this datapoint
+  """
+  timestamp: Time!
+
+  """
+  The value of this datapoint
+  """
+  value: Int!
+}

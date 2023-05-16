@@ -1,2 +1,5 @@
 /proto/
 /hub-analytics
+/graph/federation.go
+/graph/generated.go
+/graph/model/models_gen.go
